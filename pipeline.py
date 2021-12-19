@@ -6,7 +6,7 @@ import chess.pgn
 _i = 0
 _INDEX = 0
 
-EXIT = 0#set if you want stop after generating X files
+EXIT = 200#set if you want stop after generating X files
 BREAK = 0#set if you want stop after checking first X pgns
 #better not to run with both at 0s
 
@@ -102,18 +102,23 @@ def fens_to_matrix(fens):
     """
     global _INDEX
     for fen, label in fens.items():
+        color = fen.split(' ')
+        color = 1 if color[1] == 'w' else 0
         with open(f'dataset/{_INDEX}_{label}.txt', 'w') as file:
-            file.write(''.join(str(to_matrix(fen))))
+            file.write(''.join(str(to_matrix(fen, color))))
         _INDEX += 1
         if _INDEX == EXIT and EXIT != 0:
             exit()
 
-def to_matrix(fen):
+def to_matrix(fen, color):
     """ Function that changes chessboard representation to matrix
     Calls to_matrix() on every fen, label pair
 
     Parameters:
         fens (str): string containing fen
+
+    Parameters passed:
+        color (int): which color moves, 1 if white, 0 if black
 
     Returns:
         output (list of lists): matrix
@@ -122,22 +127,23 @@ def to_matrix(fen):
     flatten_board = flatten_board.replace(' ', '').replace('\n', '')
     line, output = [], []
     for idx, item in enumerate(flatten_board):
-        line.append(translate(item))
+        line.append(translate(item, color))
         if idx % 8 == 7:#split every 8 because one line of chessbord is 8 squares
             output.append(line)
             line = []
     return output
 
-def translate(piece):
+def translate(piece, color):
     """ Function that translates piece representation to one-hot encoding
 
     Parameters:
         piece (char): letter representing chess piece, '.' will return list of zeros
+        color (int): which color moves, 1 if white, 0 if black
 
     Returns:
          one_hot (list): one-hot encoded piece
     """
-    one_hot = [0 for _ in range(12)]
+    one_hot = [0 for _ in range(13)]
     if piece == '.':
         return one_hot# return list of zeros
     dict = {
@@ -154,6 +160,10 @@ def translate(piece):
         'q': 10,
         'k': 11}
     one_hot[dict[piece]] += 1
+    if color == 1 and sum(one_hot[:6]) > 0:
+        one_hot[12] = 1
+    elif color == 0 and sum(one_hot[6:]) > 0:
+        one_hot[12] = 1
     return one_hot
 
 def profile():
@@ -167,4 +177,4 @@ def profile():
 
 if __name__ == '__main__':
     # profile()
-    read_pgn('chess_data.pgn', 1001, 1400, 0)
+    read_pgn('chess_data.pgn', 1001, 1400, 5)
