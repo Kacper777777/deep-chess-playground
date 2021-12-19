@@ -2,7 +2,7 @@ import tensorflow as tf
 from tensorflow.keras import backend as K
 from tensorflow.keras.layers import Input, Convolution2D, Conv2D, MaxPooling2D, AveragePooling2D, \
     GlobalAveragePooling2D, Activation, ReLU, concatenate, Concatenate, UpSampling2D, \
-    Dropout, BatchNormalization, Lambda
+    Dropout, BatchNormalization, Lambda, Flatten, Dense
 from tensorflow.keras.models import Model
 
 sq1x1 = "squeeze1x1"
@@ -33,9 +33,11 @@ def fire_module(x, fire_id, squeeze=16, expand=64):
     return x
 
 
-def squeezenet(image_shape=(256, 256, 3),
+def squeezenet(image_shape=(224, 224, 3),
                use_bn_on_input=False,
-               first_stride=2):
+               first_stride=2,
+               output_nodes=1000,
+               name='squeezenet'):
     raw_image_input = tf.keras.Input(shape=image_shape)
     if use_bn_on_input:
         image_input = BatchNormalization()(raw_image_input)
@@ -60,15 +62,40 @@ def squeezenet(image_shape=(256, 256, 3),
     x = fire_module(x, fire_id=9, squeeze=64, expand=256)
     x = Dropout(0.5, name='drop9')(x)
 
-    x = Convolution2D(1000, (1, 1), padding='valid', name='conv10')(x)
+    x = Convolution2D(output_nodes, (1, 1), padding='valid', name='conv10')(x)
     x = Activation('relu', name='relu_conv10')(x)
     x = GlobalAveragePooling2D()(x)
     out = Activation('softmax', name='loss')(x)
 
-    model = Model(image_input, out, name='squeezenet')
+    model = Model(image_input, out, name=name)
+    return model
+
+
+def squeezenet_chess(image_shape=(8, 8, 13)):
+    chessboard_before = tf.keras.Input(shape=image_shape)
+    chessboard_after = tf.keras.Input(shape=image_shape)
+
+    squeezenet_original1 = squeezenet(image_shape=image_shape)
+    feature_extractor1 = Model(inputs=squeezenet_original1.inputs,
+                               outputs=squeezenet_original1.get_layer('drop9').output,
+                               name='feature_extractor1')
+
+    squeezenet_original2 = squeezenet(image_shape=image_shape)
+    feature_extractor2 = Model(inputs=squeezenet_original2.inputs,
+                               outputs=squeezenet_original2.get_layer('drop9').output,
+                               name='feature_extractor2')
+
+    features_before = feature_extractor1(chessboard_before)
+    features_after = feature_extractor2(chessboard_after)
+
+    concatenated_features = Concatenate(axis=-1, name='concatenated_features')([features_before, features_after])
+    x = Flatten()(concatenated_features)
+    x = Dropout(0.25)(x)
+    out = Dense(units=1, activation='sigmoid', name='out')(x)
+    model = Model(inputs=[chessboard_before, chessboard_after], outputs=out)
     return model
 
 
 if __name__ == '__main__':
-    snet = squeezenet(image_shape=(8, 8, 12))
-    snet.summary()
+    schess = squeezenet_chess(image_shape=(8, 8, 13))
+    schess.summary()
