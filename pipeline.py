@@ -25,9 +25,9 @@ def read_pgn(in_file, min_elo, max_elo, max_moves):
         max_moves (int): how many half-moves to process, set to 0 to process all
     """
     all_moves, done_moves = 0, 0
-    with open(in_file) as input:
+    with open(in_file) as input_file:
         empty_counter, lines = 0, []
-        for line in input:
+        for line in input_file:
             lines.append(line)
             if lines[-1] == '\n':
                 empty_counter += 1
