@@ -10,6 +10,7 @@ EXIT = 200#set if you want stop after generating X files
 BREAK = 0#set if you want stop after checking first X pgns
 #better not to run with both at 0s
 
+
 def read_pgn(in_file, min_elo, max_elo, max_moves):
     """ Function that reads file pgns one by one
     Based on assumption that every pgn contains exactly two empty lines
@@ -42,6 +43,7 @@ def read_pgn(in_file, min_elo, max_elo, max_moves):
                 lines = []
                 empty_counter = 0
 
+
 def check_elo(lines, min_elo, max_elo, max_moves):
     """ Function that uses regex to check if both players elo are in range
     Fuction is looking for '[WhiteElo "' + 3 or 4 digits and
@@ -64,6 +66,7 @@ def check_elo(lines, min_elo, max_elo, max_moves):
             return pgn_to_fen(lines[-2], max_moves)
         else:
             return 0, 0
+
 
 def pgn_to_fen(pgn, max_moves):
     """ Function that uses python chess
@@ -90,6 +93,7 @@ def pgn_to_fen(pgn, max_moves):
         fens_to_matrix(fens)
     return legal_moves_sum, moves
 
+
 def fens_to_matrix(fens):
     """ Function that iterates over fens
     Calls to_matrix() on every fen, label pair
@@ -109,6 +113,7 @@ def fens_to_matrix(fens):
         _INDEX += 1
         if _INDEX == EXIT and EXIT != 0:
             exit()
+
 
 def to_matrix(fen, color):
     """ Function that changes chessboard representation to matrix
@@ -132,6 +137,7 @@ def to_matrix(fen, color):
             output.append(line)
             line = []
     return output
+
 
 def translate(piece, color):
     """ Function that translates piece representation to one-hot encoding
@@ -166,6 +172,7 @@ def translate(piece, color):
         one_hot[12] = 1
     return one_hot
 
+
 def profile():
     import cProfile
     import pstats
@@ -174,6 +181,7 @@ def profile():
     stats = pstats.Stats(pr)
     stats.sort_stats(pstats.SortKey.TIME)
     stats.dump_stats(filename='prof.prof')
+
 
 if __name__ == '__main__':
     # profile()
