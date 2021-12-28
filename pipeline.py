@@ -46,7 +46,7 @@ def read_pgn(in_file, min_elo, max_elo, max_moves):
 
 def check_elo(lines, min_elo, max_elo, max_moves):
     """ Function that uses regex to check if both players elo are in range
-    Fuction is looking for '[WhiteElo "' + 3 or 4 digits and
+    Function is looking for '[WhiteElo "' + 3 or 4 digits and
     '[BlackElo "' + 3 or 4 digits
     Calls pgn_to_fen() on every pgn that elos are in range
 
