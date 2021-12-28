@@ -12,8 +12,8 @@ BREAK = 0  # set if you want stop after checking first X pgns
 
 
 def read_pgn(in_file, min_elo, max_elo, max_moves):
-    """ Function that reads file pgns one by one
-    Based on assumption that every pgn contains exactly two empty lines
+    """ Function that reads pgn files one by one
+    based on assumption that every pgn contains exactly two empty lines.
     Calls check_elo() on every pgn
 
     Parameters:
