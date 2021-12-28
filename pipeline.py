@@ -6,9 +6,9 @@ import chess.pgn
 _i = 0
 _INDEX = 0
 
-EXIT = 200#set if you want stop after generating X files
-BREAK = 0#set if you want stop after checking first X pgns
-#better not to run with both at 0s
+EXIT = 200  # set if you want stop after generating X files
+BREAK = 0  # set if you want stop after checking first X pgns
+# better not to run with both at 0s
 
 
 def read_pgn(in_file, min_elo, max_elo, max_moves):
@@ -80,16 +80,16 @@ def pgn_to_fen(pgn, max_moves):
     moves, legal_moves_sum = 0, 0
     for idx, move in enumerate(game.mainline_moves()):
         if max_moves > 0 and idx == max_moves:
-            break #return None#function break
+            break  # return None#function break
         fens = {}
         legal_moves_sum += board.legal_moves.count()
         moves += 1
         for item in board.legal_moves:
-            board.push(item)# add move
-            fens[board.fen()] = 0# add label to new fen
-            board.pop()# undo move
-        board.push(move)#add correct move
-        fens[board.fen()] += 1#add label to correct move
+            board.push(item)  # add move
+            fens[board.fen()] = 0  # add label to new fen
+            board.pop()  # undo move
+        board.push(move)  # add correct move
+        fens[board.fen()] += 1  # add label to correct move
         fens_to_matrix(fens)
     return legal_moves_sum, moves
 
@@ -133,7 +133,7 @@ def to_matrix(fen, color):
     line, output = [], []
     for idx, item in enumerate(flatten_board):
         line.append(translate(item, color))
-        if idx % 8 == 7:#split every 8 because one line of chessbord is 8 squares
+        if idx % 8 == 7:  # split every 8 because one line of chessbord is 8 squares
             output.append(line)
             line = []
     return output
@@ -151,7 +151,7 @@ def translate(piece, color):
     """
     one_hot = [0 for _ in range(13)]
     if piece == '.':
-        return one_hot# return list of zeros
+        return one_hot  # return list of zeros
     dict = {
         'P': 0,
         'N': 1,
