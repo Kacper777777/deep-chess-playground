@@ -121,7 +121,7 @@ def to_matrix(fen, color):
     Calls to_matrix() on every fen, label pair
 
     Parameters:
-        fens (str): string containing fen
+        fen (str): string containing fen
 
     Parameters passed:
         color (int): which color moves, 1 if white, 0 if black
