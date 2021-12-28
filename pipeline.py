@@ -133,7 +133,7 @@ def to_matrix(fen, color):
     line, output = [], []
     for idx, item in enumerate(flatten_board):
         line.append(translate(item, color))
-        if idx % 8 == 7:  # split every 8 because one line of chessbord is 8 squares
+        if idx % 8 == 7:  # split every 8 because one line of chessboard is 8 squares
             output.append(line)
             line = []
     return output
