@@ -173,16 +173,5 @@ def translate(piece, color):
     return one_hot
 
 
-def profile():
-    import cProfile
-    import pstats
-    with cProfile.Profile() as pr:
-        read_pgn('chess_data.pgn', 1001, 1400, 0)
-    stats = pstats.Stats(pr)
-    stats.sort_stats(pstats.SortKey.TIME)
-    stats.dump_stats(filename='prof.prof')
-
-
 if __name__ == '__main__':
-    # profile()
     read_pgn('chess_data.pgn', 1001, 1400, 5)
