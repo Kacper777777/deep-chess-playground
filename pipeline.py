@@ -73,6 +73,7 @@ def pgn_to_fen(pgn, max_moves):
     Calls fens_to_matrix on every pgn that elos are in range
 
     Parameters:
+        pgn: pgn file
         max_moves (int): how many half-moves to process, set to 0 to process all
     """
     game = chess.pgn.read_game(io.StringIO(pgn))
