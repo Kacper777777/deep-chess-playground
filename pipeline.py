@@ -152,7 +152,7 @@ def translate(piece, color):
     one_hot = [0 for _ in range(13)]
     if piece == '.':
         return one_hot  # return list of zeros
-    dict = {
+    pieces_dict = {
         'P': 0,
         'N': 1,
         'B': 2,
@@ -165,7 +165,7 @@ def translate(piece, color):
         'r': 9,
         'q': 10,
         'k': 11}
-    one_hot[dict[piece]] += 1
+    one_hot[pieces_dict[piece]] += 1
     if color == 1 and sum(one_hot[:6]) > 0:
         one_hot[12] = 1
     elif color == 0 and sum(one_hot[6:]) > 0:
