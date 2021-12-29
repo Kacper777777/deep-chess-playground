@@ -1,2 +1,2 @@
-# gucio-chess-engine
-Human-like chess engine.
+# deep-chess-playground
+Experiments with different deep learning techniques to play chess.
