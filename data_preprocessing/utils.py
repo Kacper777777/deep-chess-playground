@@ -22,7 +22,7 @@ def create_dataset_from_pgn(pgn_file_path, destination_dir, cond_func, **kwargs)
                 break
             if not cond_func(game, **kwargs):
                 continue
-            game_dir = os.path.join(destination_dir, 'game', str(counter))
+            game_dir = os.path.join(destination_dir, f'game{counter}')
             os.mkdir(game_dir)
             with open(os.path.join(game_dir, "game.pgn"), "w") as one_game_file:
                 print(game, file=one_game_file)
