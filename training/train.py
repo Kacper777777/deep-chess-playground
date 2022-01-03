@@ -1,0 +1,89 @@
+import tensorflow as tf
+import numpy as np
+import random
+import os
+import glob
+from utils import DATA_REAL_PATH
+from training.prepare_dataset import FENDataset
+from models.squeezenet import squeezenet
+import argparse
+
+
+def main():
+    # Check if the GPU  is enabled
+    print(tf.config.list_physical_devices("GPU"))
+    # For reproducibility
+    np.random.seed(42)
+    random.seed(42)
+    # For readability
+    np.set_printoptions(formatter={'float': lambda x: "{0:0.2f}".format(x)})
+
+    # Dataset and training configuration
+    #dataset_dir = os.path.join(DATA_REAL_PATH, 'datasets', "1001_1400")
+    dataset_dir = os.path.join(DATA_REAL_PATH, 'small_dataset')
+    shuffle_data = True
+    batch_size = 512
+    input_shape = (8, 8, 18)
+    train_ratio = 0.8
+    epochs = 50
+
+    # Create train and test sets
+    ds_train, ds_test = FENDataset(dataset_dir=dataset_dir,
+                                   shuffle_data=True,
+                                   batch_size=batch_size
+                                   ).create_datasets(train_ratio=train_ratio)
+
+    print("train size: ", ds_train.cardinality().numpy())
+    print("test size: ", ds_test.cardinality().numpy())
+    for el in ds_train.take(100):
+        print(tf.reduce_sum(el[1]))
+    return
+    # Model paths
+    model_path = os.path.join(DATA_REAL_PATH, 'newest_model')
+    checkpoint_path = os.path.join(model_path, 'checkpoint_dir', 'cp.ckpt')
+    checkpoint_dir = os.path.dirname(checkpoint_path)
+
+    # Model creation
+    model = squeezenet(image_shape=input_shape)
+
+    # Load weights
+    # model.load_weights(os.path.join(model_path, 'model_tf_format', 'model'))
+    # model.load_weights(checkpoint_path)
+
+    # Some useful callbacks
+
+    early_stopping = tf.keras.callbacks.EarlyStopping(
+        monitor="val_loss", patience=10, restore_best_weights=True)
+
+    checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
+        filepath=checkpoint_path, monitor='val_loss', verbose=1, save_weights_only=True,
+        save_freq='epoch', mode='auto', save_best_only=True)
+
+    reduce_lr_on_plateau = tf.keras.callbacks.ReduceLROnPlateau(monitor='loss', factor=0.5, patience=5)
+
+    callbacks_list = [early_stopping, checkpoint_callback, reduce_lr_on_plateau]
+
+    # Compiling the model
+    optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
+    loss = 'binary_crossentropy'
+    model.compile(optimizer=optimizer,
+                  loss=loss,
+                  run_eagerly=True)
+    model.summary()
+
+    model.fit(
+        x=ds_train,
+        epochs=epochs,
+        validation_data=ds_test,
+        callbacks=callbacks_list,
+    )
+
+    # Saving weights after training (tf format)
+    model.save_weights(os.path.join(model_path, 'model_tf_format', 'model'), save_format='tf')
+
+    # Saving weights after training (h5 format)
+    model.save_weights(os.path.join(model_path, 'model_h5_format', 'model.h5'), save_format='h5')
+
+
+if __name__ == '__main__':
+    main()
