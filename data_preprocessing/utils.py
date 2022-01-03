@@ -71,14 +71,16 @@ def convert_fen_to_matrix(fen):
         'k': 11}
 
     for i in range(len(flatten_board)):
-        encoded_position[i / 8, i % 8, piece_channel_dict[flatten_board[i]]] = 1
+        if flatten_board[i] != '.':
+            encoded_position[int(i / 8), int(i % 8), piece_channel_dict[flatten_board[i]]] = 1
 
     encoded_position[:, :, 12] = on_move
     encoded_position[:, :, 13] = white_kingside_castle
     encoded_position[:, :, 14] = white_queenside_castle
     encoded_position[:, :, 15] = black_kingside_castle
     encoded_position[:, :, 16] = black_queenside_castle
-    encoded_position[en_passant_index[0], en_passant_index[1], 17] = 1 if en_passant_index is not None else 0
+    if en_passant_index is not None:
+        encoded_position[en_passant_index[0], en_passant_index[1], 17] = 1
 
     return encoded_position
 
