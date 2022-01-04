@@ -36,7 +36,7 @@ def create_dataset_from_pgns(pgn_dir, destination_dir, cond_func, **kwargs):
             fen_before = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
             if cond_func(game, **kwargs):
                 with open(os.path.join(f"{destination_dir}", f"game{pgn_id}.txt"), "w", newline='') as out_file:
-                    tsv_writer = csv.writer(out_file, delimiter='\t')
+                    tsv_writer = csv.writer(out_file, delimiter=',')
                     tsv_writer.writerow(["PGN ID", "FEN before", "FEN after", "Label"])
                     board = game.board()
                     for actual_index, actual_move in enumerate(game.mainline_moves()):
