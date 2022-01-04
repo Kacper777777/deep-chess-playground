@@ -37,17 +37,17 @@ def create_dataset_from_pgns(pgn_dir, destination_dir, cond_func, **kwargs):
             if cond_func(game, **kwargs):
                 with open(os.path.join(f"{destination_dir}", f"game{pgn_id}.txt"), "w", newline='') as out_file:
                     tsv_writer = csv.writer(out_file, delimiter='\t')
-                    tsv_writer.writerow(["FEN before", "FEN after", "PGN ID"])
+                    tsv_writer.writerow(["PGN ID", "FEN before", "FEN after", "Label"])
                     board = game.board()
                     for actual_index, actual_move in enumerate(game.mainline_moves()):
                         for legal_index, legal_move in enumerate(board.legal_moves):
                             if legal_move == actual_move:
                                 continue
                             board.push(legal_move)  # make move
-                            tsv_writer.writerow([fen_before, board.fen(), pgn_id])
+                            tsv_writer.writerow([pgn_id, fen_before, board.fen(), 0])
                             board.pop()  # undo move
                         board.push(actual_move)  # add correct move
-                        tsv_writer.writerow([fen_before, board.fen(), pgn_id])
+                        tsv_writer.writerow([pgn_id, fen_before, board.fen(), 1])
                         fen_before = board.fen()
             pgn_id += 1
 
