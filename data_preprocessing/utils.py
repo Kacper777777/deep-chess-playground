@@ -38,7 +38,6 @@ def create_dataset_from_pgns(pgn_dir, destination_dir, cond_func, **kwargs):
                 with open(os.path.join(f"{destination_dir}", f"game{pgn_id}.txt"), "w", newline='') as out_file:
                     tsv_writer = csv.writer(out_file, delimiter='\t')
                     tsv_writer.writerow(["FEN before", "FEN after", "PGN ID"])
-                    pgn_id += 1
                     board = game.board()
                     for actual_index, actual_move in enumerate(game.mainline_moves()):
                         for legal_index, legal_move in enumerate(board.legal_moves):
@@ -50,6 +49,7 @@ def create_dataset_from_pgns(pgn_dir, destination_dir, cond_func, **kwargs):
                         board.push(actual_move)  # add correct move
                         tsv_writer.writerow([fen_before, board.fen(), pgn_id])
                         fen_before = board.fen()
+            pgn_id += 1
 
 
 def convert_fen_to_matrix(fen):
