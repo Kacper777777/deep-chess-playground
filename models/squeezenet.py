@@ -71,7 +71,7 @@ def squeezenet(image_shape=(224, 224, 3),
     return model
 
 
-def squeezenet_chess(image_shape=(8, 8, 13)):
+def squeezenet_chess(image_shape=(8, 8, 18)):
     chessboard_before = tf.keras.Input(shape=image_shape)
     chessboard_after = tf.keras.Input(shape=image_shape)
 
@@ -97,5 +97,5 @@ def squeezenet_chess(image_shape=(8, 8, 13)):
 
 
 if __name__ == '__main__':
-    schess = squeezenet_chess(image_shape=(8, 8, 13))
+    schess = squeezenet_chess(image_shape=(8, 8, 18))
     schess.summary()
