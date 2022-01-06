@@ -91,7 +91,7 @@ def squeezenet_chess(image_shape=(8, 8, 18)):
     concatenated_features = Concatenate(axis=-1, name='concatenated_features')([features_before, features_after])
     x = Flatten()(concatenated_features)
     x = Dropout(0.25)(x)
-    out = Dense(units=1, activation='sigmoid', name='out')(x)
+    out = Dense(units=1, activation='sigmoid', name='target')(x)
     model = Model(inputs=[chessboard_before, chessboard_after], outputs=out)
     return model
 
