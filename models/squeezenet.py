@@ -72,8 +72,8 @@ def squeezenet(image_shape=(224, 224, 3),
 
 
 def squeezenet_chess(image_shape=(8, 8, 18)):
-    chessboard_before = tf.keras.Input(shape=image_shape)
-    chessboard_after = tf.keras.Input(shape=image_shape)
+    chessboard_before = tf.keras.Input(shape=image_shape, name='chessboard_before')
+    chessboard_after = tf.keras.Input(shape=image_shape, name='chessboard_after')
 
     squeezenet_original1 = squeezenet(image_shape=image_shape)
     feature_extractor1 = Model(inputs=squeezenet_original1.inputs,
