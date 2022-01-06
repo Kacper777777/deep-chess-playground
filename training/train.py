@@ -1,12 +1,31 @@
 import tensorflow as tf
 import numpy as np
+import pandas as pd
 import random
 import os
-import glob
 from utils import DATA_REAL_PATH
-from training.prepare_dataset import FENDataset
-from models.squeezenet import squeezenet
+from data_preprocessing.utils import convert_fen_to_matrix
+from models.squeezenet import squeezenet_chess
 import argparse
+
+
+def parse_csv_helper(file):
+    file_name = str(file.numpy())[2:-1]
+    df = pd.read_csv(file_name, sep=',')
+    df.drop(columns=['PGN ID'], inplace=True)
+    df = df.sample(frac=1).reset_index(drop=True)
+    encoded_position_before = [convert_fen_to_matrix(fen) for fen in df['FEN before']]
+    encoded_position_after = [convert_fen_to_matrix(fen) for fen in df['FEN after']]
+    label = [item for item in df['Label']]
+    return [encoded_position_before, encoded_position_after, label]
+
+
+def parse_csv(x):
+    a, b, c = tf.py_function(parse_csv_helper, [x], Tout=[tf.float32, tf.float32, tf.float32])
+    dataset = tf.data.Dataset.from_tensor_slices(tuple([a, b, c]))
+    dataset = dataset.map(lambda in1, in2, out: {'chessboard_before': in1, 'chessboard_after': in2,
+                                                 'target': out})
+    return dataset
 
 
 def main():
@@ -19,32 +38,69 @@ def main():
     np.set_printoptions(formatter={'float': lambda x: "{0:0.2f}".format(x)})
 
     # Dataset and training configuration
-    #dataset_dir = os.path.join(DATA_REAL_PATH, 'datasets', "1001_1400")
+    # dataset_dir = os.path.join(DATA_REAL_PATH, 'datasets', "1001_1400")
     dataset_dir = os.path.join(DATA_REAL_PATH, 'small_dataset')
     shuffle_data = True
-    batch_size = 512
+    batch_size = 64
     input_shape = (8, 8, 18)
     train_ratio = 0.8
     epochs = 50
 
     # Create train and test sets
-    ds_train, ds_test = FENDataset(dataset_dir=dataset_dir,
-                                   shuffle_data=True,
-                                   batch_size=batch_size
-                                   ).create_datasets(train_ratio=train_ratio)
+    list_of_filenames = [f.path for f in os.scandir(dataset_dir)]
+    random.shuffle(list_of_filenames)
+    dataset = tf.data.Dataset.from_tensor_slices(list_of_filenames)
+    number_of_files = len(list_of_filenames)
 
-    print("train size: ", ds_train.cardinality().numpy())
-    print("test size: ", ds_test.cardinality().numpy())
-    for el in ds_train.take(100):
-        print(tf.reduce_sum(el[1]))
-    return
+    ds_train = dataset.take(int(number_of_files * train_ratio))
+    ds_test = dataset.skip(int(number_of_files * train_ratio))
+
+    ds_train = ds_train.shuffle(number_of_files)
+    # ds_train = ds_train.flat_map(parse_csv)
+    ds_train = ds_train.interleave(map_func=parse_csv, cycle_length=4, block_length=16)
+    ds_train = ds_train.batch(batch_size)
+    ds_train = ds_train.prefetch(tf.data.experimental.AUTOTUNE)
+
+    ds_test = ds_test.shuffle(number_of_files)
+    # ds_test = ds_test.flat_map(parse_csv)
+    ds_test = ds_test.interleave(map_func=parse_csv, cycle_length=4, block_length=16)
+    ds_test = ds_test.batch(batch_size)
+    ds_test = ds_test.prefetch(tf.data.experimental.AUTOTUNE)
+
+    # Iterate through the datasets once to get the total number of data points
+    # Count the number of labels for each class to use it for balancing the loss during training
+    train_samples = 0
+    labels_counts = {}
+    for item in ds_train:
+        targets = item.get('target')
+        train_samples += int(tf.shape(targets)[0])
+        bin_count_obj = tf.sparse.bincount(tf.cast(targets, tf.int64))
+        for i in range(len(bin_count_obj.indices)):
+            idx = int(bin_count_obj.indices[i])
+            labels_counts[idx] = labels_counts.get(idx, 0) + int(bin_count_obj.values[i])
+
+    test_samples = 0
+    for item in ds_test:
+        targets = item.get('target')
+        test_samples += int(tf.shape(targets)[0])
+
+    print(f"Number of train samples: {train_samples}")
+    print(f"Number of test samples: {test_samples}")
+    print(f"Labels counts: {labels_counts}")
+
+    # Deal with imbalanced dataset by setting the weights to balance the loss
+    n_classes = len(labels_counts)
+    class_weights = {label: train_samples / (n_classes * count)
+                     for (label, count) in labels_counts.items()}
+    print("Weights for balancing loss during training: ", class_weights)
+
     # Model paths
     model_path = os.path.join(DATA_REAL_PATH, 'newest_model')
     checkpoint_path = os.path.join(model_path, 'checkpoint_dir', 'cp.ckpt')
     checkpoint_dir = os.path.dirname(checkpoint_path)
 
     # Model creation
-    model = squeezenet(image_shape=input_shape)
+    model = squeezenet_chess(image_shape=input_shape)
 
     # Load weights
     # model.load_weights(os.path.join(model_path, 'model_tf_format', 'model'))
@@ -66,8 +122,10 @@ def main():
     # Compiling the model
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
     loss = 'binary_crossentropy'
+    metrics = ['accuracy', 'precision', 'recall'],
     model.compile(optimizer=optimizer,
                   loss=loss,
+                  metrics=metrics,
                   run_eagerly=True)
     model.summary()
 
@@ -76,6 +134,7 @@ def main():
         epochs=epochs,
         validation_data=ds_test,
         callbacks=callbacks_list,
+        class_weight=class_weights
     )
 
     # Saving weights after training (tf format)
