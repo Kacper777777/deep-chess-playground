@@ -8,7 +8,7 @@ import chess
 import chess.pgn
 from utils import DATA_REAL_PATH
 from data_preprocessing.utils import get_pgn_filepaths, convert_fen_to_matrix, check_elo
-from models.squeezenet import squeezenet_chess
+from models.squeezenet import squeezenet_chess_move_classifier
 import argparse
 
 
@@ -126,7 +126,7 @@ def main():
     checkpoint_dir = os.path.dirname(checkpoint_path)
 
     # Model creation
-    model = squeezenet_chess(image_shape=input_shape)
+    model = squeezenet_chess_move_classifier(image_shape=input_shape)
 
     # Load weights
     # model.load_weights(os.path.join(model_path, 'model_tf_format', 'model'))

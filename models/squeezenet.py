@@ -33,11 +33,11 @@ def fire_module(x, fire_id, squeeze=16, expand=64):
     return x
 
 
-def squeezenet(image_shape=(224, 224, 3),
-               use_bn_on_input=False,
-               first_stride=2,
-               output_nodes=1000,
-               name='squeezenet'):
+def squeezenet_chess(image_shape=(224, 224, 3),
+                     use_bn_on_input=False,
+                     first_stride=1,
+                     output_nodes=1000,
+                     name='squeezenet'):
     raw_image_input = tf.keras.Input(shape=image_shape)
     if use_bn_on_input:
         image_input = BatchNormalization()(raw_image_input)
@@ -46,15 +46,15 @@ def squeezenet(image_shape=(224, 224, 3),
 
     x = Convolution2D(64, (3, 3), strides=(first_stride, first_stride), padding='same', name='conv1')(image_input)
     x = Activation('relu', name='relu_conv1')(x)
-    x = MaxPooling2D(pool_size=(3, 3), strides=(2, 2), padding='same', name='pool1')(x)
+    # x = MaxPooling2D(pool_size=(3, 3), strides=(2, 2), padding='same', name='pool1')(x)
 
     x = fire_module(x, fire_id=2, squeeze=16, expand=64)
     x = fire_module(x, fire_id=3, squeeze=16, expand=64)
-    x = MaxPooling2D(pool_size=(3, 3), strides=(2, 2), padding='same', name='pool3')(x)
+    # x = MaxPooling2D(pool_size=(3, 3), strides=(2, 2), padding='same', name='pool3')(x)
 
     x = fire_module(x, fire_id=4, squeeze=32, expand=128)
     x = fire_module(x, fire_id=5, squeeze=32, expand=128)
-    x = MaxPooling2D(pool_size=(3, 3), strides=(2, 2), padding='same', name='pool5')(x)
+    # x = MaxPooling2D(pool_size=(3, 3), strides=(2, 2), padding='same', name='pool5')(x)
 
     x = fire_module(x, fire_id=6, squeeze=48, expand=192)
     x = fire_module(x, fire_id=7, squeeze=48, expand=192)
@@ -71,16 +71,16 @@ def squeezenet(image_shape=(224, 224, 3),
     return model
 
 
-def squeezenet_chess(image_shape=(8, 8, 18)):
+def squeezenet_chess_move_classifier(image_shape=(8, 8, 18)):
     chessboard_before = tf.keras.Input(shape=image_shape, name='chessboard_before')
     chessboard_after = tf.keras.Input(shape=image_shape, name='chessboard_after')
 
-    squeezenet_original1 = squeezenet(image_shape=image_shape)
+    squeezenet_original1 = squeezenet_chess(image_shape=image_shape)
     feature_extractor1 = Model(inputs=squeezenet_original1.inputs,
                                outputs=squeezenet_original1.get_layer('drop9').output,
                                name='feature_extractor1')
 
-    squeezenet_original2 = squeezenet(image_shape=image_shape)
+    squeezenet_original2 = squeezenet_chess(image_shape=image_shape)
     feature_extractor2 = Model(inputs=squeezenet_original2.inputs,
                                outputs=squeezenet_original2.get_layer('drop9').output,
                                name='feature_extractor2')
@@ -97,5 +97,5 @@ def squeezenet_chess(image_shape=(8, 8, 18)):
 
 
 if __name__ == '__main__':
-    schess = squeezenet_chess(image_shape=(8, 8, 18))
+    schess = squeezenet_chess_move_classifier(image_shape=(8, 8, 18))
     schess.summary()
