@@ -1,31 +1,58 @@
 import tensorflow as tf
+from tensorflow.keras import backend as K
 import numpy as np
 import pandas as pd
 import random
 import os
+import chess
+import chess.pgn
 from utils import DATA_REAL_PATH
-from data_preprocessing.utils import convert_fen_to_matrix
+from data_preprocessing.utils import get_pgn_filepaths, convert_fen_to_matrix, check_elo
 from models.squeezenet import squeezenet_chess
 import argparse
 
 
-def parse_csv_helper(file):
+def parse_file_helper(file):
     file_name = str(file.numpy())[2:-1]
-    df = pd.read_csv(file_name, sep=',')
-    df.drop(columns=['PGN ID'], inplace=True)
-    df = df.sample(frac=1).reset_index(drop=True)
-    encoded_position_before = [convert_fen_to_matrix(fen) for fen in df['FEN before']]
-    encoded_position_after = [convert_fen_to_matrix(fen) for fen in df['FEN after']]
-    label = [item for item in df['Label']]
+    datapoints = []
+    with open(file_name) as input_file:
+        game = chess.pgn.read_game(input_file)
+        fen_before = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+        board = game.board()
+        for actual_index, actual_move in enumerate(game.mainline_moves()):
+            for legal_index, legal_move in enumerate(board.legal_moves):
+                if legal_move == actual_move:
+                    continue
+                board.push(legal_move)  # make move
+                datapoints.append((fen_before, board.fen(), 0))
+                board.pop()  # undo move
+            board.push(actual_move)  # make actual move
+            datapoints.append((fen_before, board.fen(), 1))
+            fen_before = board.fen()
+    random.shuffle(datapoints)
+    datapoints = np.array(datapoints).T
+    encoded_position_before = [convert_fen_to_matrix(fen) for fen in datapoints[0]]
+    encoded_position_after = [convert_fen_to_matrix(fen) for fen in datapoints[1]]
+    label = datapoints[2]
     return [encoded_position_before, encoded_position_after, label]
 
 
-def parse_csv(x):
-    a, b, c = tf.py_function(parse_csv_helper, [x], Tout=[tf.float32, tf.float32, tf.float32])
+def parse_file(x):
+    a, b, c = tf.py_function(parse_file_helper, [x], Tout=[tf.float32, tf.float32, tf.float32])
     dataset = tf.data.Dataset.from_tensor_slices(tuple([a, b, c]))
-    dataset = dataset.map(lambda in1, in2, out: {'chessboard_before': in1, 'chessboard_after': in2,
-                                                 'target': out})
+    dataset = dataset.map(lambda in1, in2, out: ({'chessboard_before': in1, 'chessboard_after': in2},
+                                                 {'target': out}))
     return dataset
+
+
+def weighted_binary_crossentropy(pos_weight=1, neg_weight=1):
+    def loss(y_true, y_pred):
+        y_true = K.clip(y_true, K.epsilon(), 1 - K.epsilon())
+        y_pred = K.clip(y_pred, K.epsilon(), 1 - K.epsilon())
+        logloss = -(y_true * K.log(y_pred) * pos_weight + (1 - y_true) * K.log(1 - y_pred) * neg_weight)
+        return K.mean(logloss, axis=-1)
+
+    return loss
 
 
 def main():
@@ -38,8 +65,7 @@ def main():
     np.set_printoptions(formatter={'float': lambda x: "{0:0.2f}".format(x)})
 
     # Dataset and training configuration
-    # dataset_dir = os.path.join(DATA_REAL_PATH, 'datasets', "1001_1400")
-    dataset_dir = os.path.join(DATA_REAL_PATH, 'small_dataset')
+    dataset_dir = os.path.join(DATA_REAL_PATH, 'datasets', "1001_1200")
     shuffle_data = True
     batch_size = 64
     input_shape = (8, 8, 18)
@@ -47,32 +73,32 @@ def main():
     epochs = 50
 
     # Create train and test sets
-    list_of_filenames = [f.path for f in os.scandir(dataset_dir)]
+    list_of_filenames = get_pgn_filepaths(dataset_dir, check_elo, min_elo=1001, max_elo=1800)
     random.shuffle(list_of_filenames)
     dataset = tf.data.Dataset.from_tensor_slices(list_of_filenames)
     number_of_files = len(list_of_filenames)
 
     ds_train = dataset.take(int(number_of_files * train_ratio))
-    ds_test = dataset.skip(int(number_of_files * train_ratio))
+    ds_val = dataset.skip(int(number_of_files * train_ratio))
 
     ds_train = ds_train.shuffle(number_of_files)
     # ds_train = ds_train.flat_map(parse_csv)
-    ds_train = ds_train.interleave(map_func=parse_csv, cycle_length=4, block_length=16)
+    ds_train = ds_train.interleave(map_func=parse_file, cycle_length=4, block_length=16)
     ds_train = ds_train.batch(batch_size)
     ds_train = ds_train.prefetch(tf.data.experimental.AUTOTUNE)
 
-    ds_test = ds_test.shuffle(number_of_files)
+    ds_val = ds_val.shuffle(number_of_files)
     # ds_test = ds_test.flat_map(parse_csv)
-    ds_test = ds_test.interleave(map_func=parse_csv, cycle_length=4, block_length=16)
-    ds_test = ds_test.batch(batch_size)
-    ds_test = ds_test.prefetch(tf.data.experimental.AUTOTUNE)
+    ds_val = ds_val.interleave(map_func=parse_file, cycle_length=4, block_length=16)
+    ds_val = ds_val.batch(batch_size)
+    ds_val = ds_val.prefetch(tf.data.experimental.AUTOTUNE)
 
     # Iterate through the datasets once to get the total number of data points
     # Count the number of labels for each class to use it for balancing the loss during training
     train_samples = 0
     labels_counts = {}
-    for item in ds_train:
-        targets = item.get('target')
+    for item in ds_train.take(10000):
+        targets = item[1].get('target')
         train_samples += int(tf.shape(targets)[0])
         bin_count_obj = tf.sparse.bincount(tf.cast(targets, tf.int64))
         for i in range(len(bin_count_obj.indices)):
@@ -80,8 +106,8 @@ def main():
             labels_counts[idx] = labels_counts.get(idx, 0) + int(bin_count_obj.values[i])
 
     test_samples = 0
-    for item in ds_test:
-        targets = item.get('target')
+    for item in ds_val:
+        targets = item[1].get('target')
         test_samples += int(tf.shape(targets)[0])
 
     print(f"Number of train samples: {train_samples}")
@@ -90,9 +116,9 @@ def main():
 
     # Deal with imbalanced dataset by setting the weights to balance the loss
     n_classes = len(labels_counts)
-    class_weights = {label: train_samples / (n_classes * count)
-                     for (label, count) in labels_counts.items()}
-    print("Weights for balancing loss during training: ", class_weights)
+    class_weight = {label: train_samples / (n_classes * count)
+                    for (label, count) in labels_counts.items()}
+    print("Weights for balancing loss during training: ", class_weight)
 
     # Model paths
     model_path = os.path.join(DATA_REAL_PATH, 'newest_model')
@@ -121,8 +147,11 @@ def main():
 
     # Compiling the model
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
-    loss = 'binary_crossentropy'
-    metrics = ['accuracy', 'precision', 'recall'],
+    loss = weighted_binary_crossentropy(pos_weight=class_weight.get(1),
+                                        neg_weight=class_weight.get(0))
+    metrics = [tf.keras.metrics.BinaryAccuracy(threshold=0.5),
+               tf.keras.metrics.Precision(),
+               tf.keras.metrics.Recall()]
     model.compile(optimizer=optimizer,
                   loss=loss,
                   metrics=metrics,
@@ -132,9 +161,8 @@ def main():
     model.fit(
         x=ds_train,
         epochs=epochs,
-        validation_data=ds_test,
-        callbacks=callbacks_list,
-        class_weight=class_weights
+        validation_data=ds_val,
+        callbacks=callbacks_list
     )
 
     # Saving weights after training (tf format)
