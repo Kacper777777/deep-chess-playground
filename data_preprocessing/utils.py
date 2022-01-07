@@ -31,39 +31,6 @@ def get_pgn_filepaths(pgn_dir, cond_func, **kwargs):
     return filepaths
 
 
-def create_dataset_from_pgns(pgn_dir, destination_dir, cond_func, **kwargs):
-    """ Function that reads pgn files one by one
-        based on assumption that every pgn contains exactly two empty lines.
-
-        Parameters:
-            pgn_dir (str): path to the directory containing .pgn files
-            destination_dir (str): where to save generated dataset
-            cond_func: pointer to the function that takes a pgn and returns bool
-    """
-    pgn_id = 0
-    for pgn_entry in os.scandir(pgn_dir):
-        pgn_file_path = pgn_entry.path
-        with open(pgn_file_path) as input_file:
-            game = chess.pgn.read_game(input_file)
-            fen_before = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-            if cond_func(game, **kwargs):
-                with open(os.path.join(f"{destination_dir}", f"game{pgn_id}.txt"), "w", newline='') as out_file:
-                    tsv_writer = csv.writer(out_file, delimiter=',')
-                    tsv_writer.writerow(["PGN ID", "FEN before", "FEN after", "Label"])
-                    board = game.board()
-                    for actual_index, actual_move in enumerate(game.mainline_moves()):
-                        for legal_index, legal_move in enumerate(board.legal_moves):
-                            if legal_move == actual_move:
-                                continue
-                            board.push(legal_move)  # make move
-                            tsv_writer.writerow([pgn_id, fen_before, board.fen(), 0])
-                            board.pop()  # undo move
-                        board.push(actual_move)  # add correct move
-                        tsv_writer.writerow([pgn_id, fen_before, board.fen(), 1])
-                        fen_before = board.fen()
-            pgn_id += 1
-
-
 def convert_fen_to_matrix(fen):
     fen_elements = fen.split(' ')
     flatten_board = str(chess.Board(fen))
