@@ -65,7 +65,7 @@ def main():
     np.set_printoptions(formatter={'float': lambda x: "{0:0.2f}".format(x)})
 
     # Dataset and training configuration
-    dataset_dir = os.path.join(DATA_REAL_PATH, 'datasets', "1001_1200")
+    dataset_dir = os.path.join(DATA_REAL_PATH, 'datasets', "lichess_games")
     shuffle_data = True
     batch_size = 64
     input_shape = (8, 8, 18)
