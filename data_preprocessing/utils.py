@@ -19,6 +19,18 @@ def separate_pgns_into_different_files(pgn_file_path, destination_dir):
             counter += 1
 
 
+def get_pgn_filepaths(pgn_dir, cond_func, **kwargs):
+    """Get all of the file paths to the pgn files that satisfy the condition."""
+    filepaths = []
+    for pgn_entry in os.scandir(pgn_dir):
+        pgn_file_path = pgn_entry.path
+        with open(pgn_file_path) as input_file:
+            game = chess.pgn.read_game(input_file)
+            if cond_func(game, **kwargs):
+                filepaths.append(pgn_file_path)
+    return filepaths
+
+
 def create_dataset_from_pgns(pgn_dir, destination_dir, cond_func, **kwargs):
     """ Function that reads pgn files one by one
         based on assumption that every pgn contains exactly two empty lines.
