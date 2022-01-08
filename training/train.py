@@ -10,6 +10,7 @@ from utils import DATA_REAL_PATH
 from data_preprocessing.utils import get_pgn_filepaths, convert_fen_to_matrix, check_elo
 from models.squeezenet import squeezenet_chess_move_classifier
 import argparse
+# TODO Use argparse Python utilities in order to pass arguments using command line or config file
 
 
 def parse_file_helper(file):
