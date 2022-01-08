@@ -1,4 +1,6 @@
 import csv
+import re
+
 import numpy as np
 import os
 import chess
@@ -76,6 +78,10 @@ def convert_fen_to_matrix(fen):
 
 
 def check_elo(game, min_elo, max_elo):
+    # TODO In the future use something more efficient than regex here
+    if (re.search(f"^\\d{3,4}$", str(game.headers['WhiteElo'])) is None) or \
+            (re.search(f"^\\d{3,4}$", str(game.headers['BlackElo'])) is None):
+        return False
     if (min_elo <= int(game.headers['WhiteElo']) <= max_elo) and (min_elo <= int(game.headers['BlackElo']) <= max_elo):
         return True
     else:
