@@ -73,7 +73,7 @@ def main():
     epochs = 50
 
     # Create train and test sets
-    list_of_filenames = get_pgn_filepaths(dataset_dir, check_elo, min_elo=1001, max_elo=1800)
+    list_of_filenames = get_pgn_filepaths(dataset_dir, check_elo, min_elo=1001, max_elo=1200)
     random.shuffle(list_of_filenames)
     dataset = tf.data.Dataset.from_tensor_slices(list_of_filenames)
     number_of_files = len(list_of_filenames)
