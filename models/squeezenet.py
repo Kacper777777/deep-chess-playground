@@ -89,9 +89,9 @@ def squeezenet_chess_move_classifier(image_shape=(8, 8, 18)):
     features_after = feature_extractor2(chessboard_after)
 
     concatenated_features = Concatenate(axis=-1, name='concatenated_features')([features_before, features_after])
-    x = Flatten()(concatenated_features)
-    x = Dropout(0.25)(x)
-    out = Dense(units=1, activation='sigmoid', name='target')(x)
+    x = Convolution2D(1, (1, 1), padding='valid', activation='relu', name='last_conv')(concatenated_features)
+    x = GlobalAveragePooling2D()(x)
+    out = Activation('sigmoid', name='target')(x)
     model = Model(inputs=[chessboard_before, chessboard_after], outputs=out)
     return model
 
