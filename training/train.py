@@ -106,7 +106,7 @@ def main():
     # Count the number of labels for each class to use it for balancing the loss during training
     train_samples = 0
     labels_counts = {}
-    for item in ds_train.take(10000):
+    for item in ds_train:
         targets = item[1].get('target')
         train_samples += int(tf.shape(targets)[0])
         bin_count_obj = tf.sparse.bincount(tf.cast(targets, tf.int64))
