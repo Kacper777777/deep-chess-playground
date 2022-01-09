@@ -1,3 +1,4 @@
+import io
 import tensorflow as tf
 from tensorflow.keras import backend as K
 import numpy as np
@@ -13,30 +14,41 @@ import argparse
 # TODO Use argparse Python utilities in order to pass arguments using command line or config file
 
 
-def parse_file_helper(file):
+def get_sequences_of_moves_from_pgn_helper(file):
     file_name = str(file.numpy())[2:-1]
-    datapoints = []
     with open(file_name) as input_file:
-        while True:
-            game = chess.pgn.read_game(input_file)
-            if game is None:
-                break
-            #if not cond_func(game, **kwargs):
-            #    continue
-            #if not check_elo(game=game, min_elo=1001, max_elo=1500):
-            #   continue
-            fen_before = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-            board = game.board()
-            for actual_index, actual_move in enumerate(game.mainline_moves()):
-                for legal_index, legal_move in enumerate(board.legal_moves):
-                    if legal_move == actual_move:
-                        continue
-                    board.push(legal_move)  # make move
-                    datapoints.append((fen_before, board.fen(), 0))
-                    board.pop()  # undo move
-                board.push(actual_move)  # make actual move
-                datapoints.append((fen_before, board.fen(), 1))
-                fen_before = board.fen()
+        sequences_of_moves = [line for line in input_file.readlines()]
+    return sequences_of_moves
+
+
+def get_sequences_of_moves_from_pgn(x):
+    a = tf.py_function(get_sequences_of_moves_from_pgn_helper, [x], Tout=[tf.string])
+    dataset = tf.data.Dataset.from_tensor_slices(a)
+    return dataset
+
+
+def create_matrices_helper(pgn):
+    pgn = str(pgn.numpy())[2:-1]
+    datapoints = []
+    game = chess.pgn.read_game(io.StringIO(pgn))
+    #if game is None:
+    #    break
+    #if not cond_func(game, **kwargs):
+    #    continue
+    #if not check_elo(game=game, min_elo=1001, max_elo=1200):
+    #   continue
+    fen_before = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+    board = game.board()
+    for actual_index, actual_move in enumerate(game.mainline_moves()):
+        for legal_index, legal_move in enumerate(board.legal_moves):
+            if legal_move == actual_move:
+                continue
+            board.push(legal_move)  # make move
+            datapoints.append((fen_before, board.fen(), 0))
+            board.pop()  # undo move
+        board.push(actual_move)  # make actual move
+        datapoints.append((fen_before, board.fen(), 1))
+        fen_before = board.fen()
     random.shuffle(datapoints)
     datapoints = np.array(datapoints).T
     encoded_position_before = [convert_fen_to_matrix(fen) for fen in datapoints[0]]
@@ -45,8 +57,8 @@ def parse_file_helper(file):
     return [encoded_position_before, encoded_position_after, label]
 
 
-def parse_file(x):
-    a, b, c = tf.py_function(parse_file_helper, [x], Tout=[tf.float32, tf.float32, tf.float32])
+def create_matrices(x):
+    a, b, c = tf.py_function(create_matrices_helper, [x], Tout=[tf.float32, tf.float32, tf.float32])
     dataset = tf.data.Dataset.from_tensor_slices(tuple([a, b, c]))
     dataset = dataset.map(lambda in1, in2, out: ({'chessboard_before': in1, 'chessboard_after': in2},
                                                  {'target': out}))
@@ -75,7 +87,7 @@ def main():
     # Dataset and training configuration
     dataset_dir = os.path.join(DATA_REAL_PATH, 'datasets', "lichess_games")
     shuffle_data = True
-    batch_size = 1024
+    batch_size = 128
     input_shape = (8, 8, 18)
     train_ratio = 0.8
     epochs = 50
@@ -90,15 +102,20 @@ def main():
     ds_val = dataset.skip(int(number_of_files * train_ratio))
 
     ds_train = ds_train.shuffle(number_of_files)
-    # ds_train = ds_train.flat_map(parse_csv)
-    ds_train = ds_train.interleave(map_func=parse_file, cycle_length=4, block_length=16)
-    #ds_train = ds_train.interleave(map_func=create_matrices, cycle_length=4, block_length=16)
+    # ds_train = ds_train.flat_map(parse_file)
+    ds_train = ds_train.interleave(map_func=get_sequences_of_moves_from_pgn,
+                                   num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    ds_train = ds_train.interleave(map_func=create_matrices,
+                                   num_parallel_calls=tf.data.experimental.AUTOTUNE)
     ds_train = ds_train.batch(batch_size)
     ds_train = ds_train.prefetch(tf.data.experimental.AUTOTUNE)
 
     ds_val = ds_val.shuffle(number_of_files)
-    # ds_test = ds_test.flat_map(parse_csv)
-    ds_val = ds_val.interleave(map_func=parse_file, cycle_length=4, block_length=16)
+    # ds_val = ds_val.flat_map(parse_file)
+    ds_val = ds_val.interleave(map_func=get_sequences_of_moves_from_pgn,
+                               num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    ds_val = ds_val.interleave(map_func=create_matrices,
+                               num_parallel_calls=tf.data.experimental.AUTOTUNE)
     ds_val = ds_val.batch(batch_size)
     ds_val = ds_val.prefetch(tf.data.experimental.AUTOTUNE)
 
