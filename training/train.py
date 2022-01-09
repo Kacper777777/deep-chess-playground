@@ -7,7 +7,7 @@ import os
 import chess
 import chess.pgn
 from utils import DATA_REAL_PATH
-from data_preprocessing.utils import get_pgn_filepaths, convert_fen_to_matrix, check_elo
+from data_preprocessing.utils import convert_fen_to_matrix, check_elo
 from models.squeezenet import squeezenet_chess_move_classifier
 import argparse
 # TODO Use argparse Python utilities in order to pass arguments using command line or config file
@@ -17,19 +17,26 @@ def parse_file_helper(file):
     file_name = str(file.numpy())[2:-1]
     datapoints = []
     with open(file_name) as input_file:
-        game = chess.pgn.read_game(input_file)
-        fen_before = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-        board = game.board()
-        for actual_index, actual_move in enumerate(game.mainline_moves()):
-            for legal_index, legal_move in enumerate(board.legal_moves):
-                if legal_move == actual_move:
-                    continue
-                board.push(legal_move)  # make move
-                datapoints.append((fen_before, board.fen(), 0))
-                board.pop()  # undo move
-            board.push(actual_move)  # make actual move
-            datapoints.append((fen_before, board.fen(), 1))
-            fen_before = board.fen()
+        while True:
+            game = chess.pgn.read_game(input_file)
+            if game is None:
+                break
+            #if not cond_func(game, **kwargs):
+            #    continue
+            #if not check_elo(game=game, min_elo=1001, max_elo=1500):
+            #   continue
+            fen_before = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+            board = game.board()
+            for actual_index, actual_move in enumerate(game.mainline_moves()):
+                for legal_index, legal_move in enumerate(board.legal_moves):
+                    if legal_move == actual_move:
+                        continue
+                    board.push(legal_move)  # make move
+                    datapoints.append((fen_before, board.fen(), 0))
+                    board.pop()  # undo move
+                board.push(actual_move)  # make actual move
+                datapoints.append((fen_before, board.fen(), 1))
+                fen_before = board.fen()
     random.shuffle(datapoints)
     datapoints = np.array(datapoints).T
     encoded_position_before = [convert_fen_to_matrix(fen) for fen in datapoints[0]]
@@ -68,13 +75,13 @@ def main():
     # Dataset and training configuration
     dataset_dir = os.path.join(DATA_REAL_PATH, 'datasets', "lichess_games")
     shuffle_data = True
-    batch_size = 64
+    batch_size = 1024
     input_shape = (8, 8, 18)
     train_ratio = 0.8
     epochs = 50
 
     # Create train and test sets
-    list_of_filenames = get_pgn_filepaths(dataset_dir, check_elo, min_elo=1001, max_elo=1200)
+    list_of_filenames = [f.path for f in os.scandir(dataset_dir)]
     random.shuffle(list_of_filenames)
     dataset = tf.data.Dataset.from_tensor_slices(list_of_filenames)
     number_of_files = len(list_of_filenames)
@@ -85,6 +92,7 @@ def main():
     ds_train = ds_train.shuffle(number_of_files)
     # ds_train = ds_train.flat_map(parse_csv)
     ds_train = ds_train.interleave(map_func=parse_file, cycle_length=4, block_length=16)
+    #ds_train = ds_train.interleave(map_func=create_matrices, cycle_length=4, block_length=16)
     ds_train = ds_train.batch(batch_size)
     ds_train = ds_train.prefetch(tf.data.experimental.AUTOTUNE)
 
