@@ -59,7 +59,7 @@ def squeezenet_feature_extractor(image_shape=(8, 8, 18),
     x = fire_module(x, fire_id=7, squeeze=48, expand=192)
     x = fire_module(x, fire_id=8, squeeze=64, expand=256)
     x = fire_module(x, fire_id=9, squeeze=64, expand=256)
-    x = Dropout(0.5, name='drop9')(x)
+    #x = Dropout(0.5, name='drop9')(x)
 
     model = Model(image_input, x, name=name)
     return model
