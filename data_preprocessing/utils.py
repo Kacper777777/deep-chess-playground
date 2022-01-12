@@ -6,18 +6,17 @@ import chess
 import chess.pgn
 
 
-def separate_pgns_into_different_files(pgn_file_path, destination_dir):
-    """Get all the pgns from the single file and write each .pgn into separate file.
-    All of the generated files will be created in the destination dir."""
-    with open(pgn_file_path) as input_file:
-        counter = 0
-        while True:
-            game = chess.pgn.read_game(input_file)
-            if game is None:
-                break
-            with open(os.path.join(destination_dir, f"game{counter}.pgn"), 'w') as out:
-                print(game, file=out)
-            counter += 1
+def write_one_game_in_one_line(input_file_path, output_file_path):
+    """Get all the pgns from the single file and write each .pgn into new file in one line."""
+    with open(input_file_path, 'r') as input_file:
+        with open(output_file_path, 'w') as output_file:
+            while True:
+                game = chess.pgn.read_game(input_file)
+                if game is None:
+                    break
+                for key in game.headers:
+                    print(f'[{key} "{game.headers[key]}"]', file=output_file, sep='', end=' | ')
+                print('\n', file=output_file, end='')
 
 
 def convert_fen_to_matrix(fen):
