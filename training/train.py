@@ -1,78 +1,81 @@
 import io
+import re
 import tensorflow as tf
 from tensorflow.keras import backend as K
 import numpy as np
 import pandas as pd
+import csv
 import random
 import os
 import chess
 import chess.pgn
 from utils import DATA_REAL_PATH
-from data_preprocessing.utils import convert_fen_to_matrix, check_elo
-from models.squeezenet import squeezenet_chess_move_classifier
+from data_preprocessing.utils import convert_fen_to_matrix, encode_move_8x8x73
+from models.squeezenet import chess_move_classifier, chess_position_evaluator, \
+    chess_move_classifier_and_position_evaluator
 import argparse
+
 # TODO Use argparse Python utilities in order to pass arguments using command line or config file
 
 
-def get_sequences_of_moves_from_pgn_helper(file):
+min_elo, max_elo = 1001, 1400
+
+
+def get_position_move_and_result_helper(file):
     file_name = str(file.numpy())[2:-1]
-    with open(file_name) as input_file:
-        sequences_of_moves = [line for line in input_file.readlines()]
-    return sequences_of_moves
+    df = pd.read_csv(file_name, sep='\t')
+    df = df.sample(frac=1).reset_index(drop=True)
+    df['WhiteElo'] = pd.to_numeric(df['WhiteElo'], errors='coerce')
+    df['BlackElo'] = pd.to_numeric(df['BlackElo'], errors='coerce')
+    df = df[df['WhiteElo'].notnull()]
+    df = df[df['BlackElo'].notnull()]
+    df['WhiteElo'] = df['WhiteElo'].between(1001, 1400, inclusive=True)
+    df['BlackElo'] = df['BlackElo'].between(1001, 1400, inclusive=True)
+    df_dict = df.to_dict('records')
+    datapoints = []
+    for row in df_dict:
+        pgn = row["PGN"]
+        game = chess.pgn.read_game(io.StringIO(pgn))
+        board = game.board()
+        for actual_index, actual_move in enumerate(game.mainline_moves()):
+            fen_before = board.fen()
+            board.push(actual_move)
+            datapoints.append(f"""{str(fen_before)};{str(actual_move)};{row["Result"]}""")
+    random.shuffle(datapoints)
+    return datapoints
 
 
-def get_sequences_of_moves_from_pgn(x):
-    a = tf.py_function(get_sequences_of_moves_from_pgn_helper, [x], Tout=[tf.string])
+def get_position_move_and_result(file):
+    a = tf.py_function(get_position_move_and_result_helper, [file], Tout=[tf.string])
     dataset = tf.data.Dataset.from_tensor_slices(a)
     return dataset
 
 
-def create_matrices_helper(pgn):
-    pgn = str(pgn.numpy())[2:-1]
-    datapoints = []
-    game = chess.pgn.read_game(io.StringIO(pgn))
-    #if game is None:
-    #    break
-    #if not cond_func(game, **kwargs):
-    #    continue
-    #if not check_elo(game=game, min_elo=1001, max_elo=1200):
-    #   continue
-    fen_before = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-    board = game.board()
-    for actual_index, actual_move in enumerate(game.mainline_moves()):
-        for legal_index, legal_move in enumerate(board.legal_moves):
-            if legal_move == actual_move:
-                continue
-            board.push(legal_move)  # make move
-            datapoints.append((fen_before, board.fen(), 0))
-            board.pop()  # undo move
-        board.push(actual_move)  # make actual move
-        datapoints.append((fen_before, board.fen(), 1))
-        fen_before = board.fen()
-    random.shuffle(datapoints)
-    datapoints = np.array(datapoints).T
-    encoded_position_before = [convert_fen_to_matrix(fen) for fen in datapoints[0]]
-    encoded_position_after = [convert_fen_to_matrix(fen) for fen in datapoints[1]]
-    label = datapoints[2]
-    return [encoded_position_before, encoded_position_after, label]
+def create_matrices_helper(fen_move_result):
+    fen_move_result = str(fen_move_result.numpy())[2:-1]
+    elements = fen_move_result.split(";")
+    fen, move, str_result = elements[0], elements[1], elements[2]
+    res_white = float(str_result[0])
+    res_black = float(str_result[2])
+    draw = float((res_white + res_black) == 0)
+    if res_white:
+        result = 0
+    elif draw:
+        result = 1
+    else:
+        result = 2
+    encoded_position = convert_fen_to_matrix(fen)
+    # move_probabilities = encode_move_8x8x73(move)
+    evaluation = tf.one_hot(indices=result, depth=3)
+    return encoded_position, evaluation
 
 
 def create_matrices(x):
-    a, b, c = tf.py_function(create_matrices_helper, [x], Tout=[tf.float32, tf.float32, tf.float32])
-    dataset = tf.data.Dataset.from_tensor_slices(tuple([a, b, c]))
-    dataset = dataset.map(lambda in1, in2, out: ({'chessboard_before': in1, 'chessboard_after': in2},
-                                                 {'target': out}))
+    a, b = tf.py_function(create_matrices_helper, [x], Tout=[tf.float32, tf.float32])
+    dataset = tf.data.Dataset.from_tensor_slices(tuple([a, b]))
+    dataset = dataset.map(lambda board, out1: ({'chessboard': board},
+                                               {'evaluation': out1}))
     return dataset
-
-
-def weighted_binary_crossentropy(pos_weight=1, neg_weight=1):
-    def loss(y_true, y_pred):
-        y_true = K.clip(y_true, K.epsilon(), 1 - K.epsilon())
-        y_pred = K.clip(y_pred, K.epsilon(), 1 - K.epsilon())
-        logloss = -(y_true * K.log(y_pred) * pos_weight + (1 - y_true) * K.log(1 - y_pred) * neg_weight)
-        return K.mean(logloss, axis=-1)
-
-    return loss
 
 
 def main():
@@ -85,9 +88,9 @@ def main():
     np.set_printoptions(formatter={'float': lambda x: "{0:0.2f}".format(x)})
 
     # Dataset and training configuration
-    dataset_dir = os.path.join(DATA_REAL_PATH, 'datasets', "lichess_games")
+    dataset_dir = os.path.join(DATA_REAL_PATH, 'datasets', "1001-1400")
     shuffle_data = True
-    batch_size = 128
+    batch_size = 512
     input_shape = (8, 8, 18)
     train_ratio = 0.8
     epochs = 50
@@ -102,49 +105,22 @@ def main():
     ds_val = dataset.skip(int(number_of_files * train_ratio))
 
     ds_train = ds_train.shuffle(number_of_files)
-    # ds_train = ds_train.flat_map(parse_file)
-    ds_train = ds_train.interleave(map_func=get_sequences_of_moves_from_pgn,
+    ds_train = ds_train.interleave(map_func=get_position_move_and_result,
                                    num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    ds_train = ds_train.interleave(map_func=create_matrices,
-                                   num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    ds_train = ds_train.cache()
+    ds_train = ds_train.map(map_func=create_matrices,
+                            num_parallel_calls=tf.data.experimental.AUTOTUNE)
     ds_train = ds_train.batch(batch_size)
     ds_train = ds_train.prefetch(tf.data.experimental.AUTOTUNE)
 
     ds_val = ds_val.shuffle(number_of_files)
-    # ds_val = ds_val.flat_map(parse_file)
-    ds_val = ds_val.interleave(map_func=get_sequences_of_moves_from_pgn,
+    ds_val = ds_val.interleave(map_func=get_position_move_and_result,
                                num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    ds_val = ds_val.interleave(map_func=create_matrices,
-                               num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    ds_val = ds_val.cache()
+    ds_val = ds_val.map(map_func=create_matrices,
+                        num_parallel_calls=tf.data.experimental.AUTOTUNE)
     ds_val = ds_val.batch(batch_size)
     ds_val = ds_val.prefetch(tf.data.experimental.AUTOTUNE)
-
-    # Iterate through the datasets once to get the total number of data points
-    # Count the number of labels for each class to use it for balancing the loss during training
-    train_samples = 0
-    labels_counts = {}
-    for item in ds_train:
-        targets = item[1].get('target')
-        train_samples += int(tf.shape(targets)[0])
-        bin_count_obj = tf.sparse.bincount(tf.cast(targets, tf.int64))
-        for i in range(len(bin_count_obj.indices)):
-            idx = int(bin_count_obj.indices[i])
-            labels_counts[idx] = labels_counts.get(idx, 0) + int(bin_count_obj.values[i])
-
-    test_samples = 0
-    for item in ds_val:
-        targets = item[1].get('target')
-        test_samples += int(tf.shape(targets)[0])
-
-    print(f"Number of train samples: {train_samples}")
-    print(f"Number of test samples: {test_samples}")
-    print(f"Labels counts: {labels_counts}")
-
-    # Deal with imbalanced dataset by setting the weights to balance the loss
-    n_classes = len(labels_counts)
-    class_weight = {label: train_samples / (n_classes * count)
-                    for (label, count) in labels_counts.items()}
-    print("Weights for balancing loss during training: ", class_weight)
 
     # Model paths
     model_path = os.path.join(DATA_REAL_PATH, 'newest_model')
@@ -152,7 +128,7 @@ def main():
     checkpoint_dir = os.path.dirname(checkpoint_path)
 
     # Model creation
-    model = squeezenet_chess_move_classifier(image_shape=input_shape)
+    model = chess_position_evaluator(input_shape=input_shape)
 
     # Load weights
     # model.load_weights(os.path.join(model_path, 'model_tf_format', 'model'))
@@ -173,8 +149,7 @@ def main():
 
     # Compiling the model
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
-    loss = weighted_binary_crossentropy(pos_weight=class_weight.get(1),
-                                        neg_weight=class_weight.get(0))
+    loss = 'categorical_crossentropy'
     metrics = [tf.keras.metrics.BinaryAccuracy(threshold=0.5),
                tf.keras.metrics.Precision(),
                tf.keras.metrics.Recall()]
@@ -190,12 +165,6 @@ def main():
         validation_data=ds_val,
         callbacks=callbacks_list
     )
-
-    # Saving weights after training (tf format)
-    model.save_weights(os.path.join(model_path, 'model_tf_format', 'model'), save_format='tf')
-
-    # Saving weights after training (h5 format)
-    model.save_weights(os.path.join(model_path, 'model_h5_format', 'model.h5'), save_format='h5')
 
 
 if __name__ == '__main__':

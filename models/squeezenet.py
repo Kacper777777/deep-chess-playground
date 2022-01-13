@@ -1,9 +1,10 @@
 import tensorflow as tf
 from tensorflow.keras import backend as K
-from tensorflow.keras.layers import Input, Convolution2D, Conv2D, MaxPooling2D, AveragePooling2D, \
-    GlobalAveragePooling2D, Activation, ReLU, concatenate, Concatenate, UpSampling2D, \
+from tensorflow.keras.layers import Input, Convolution2D, Conv2D, MaxPooling2D, \
+    GlobalAveragePooling2D, Activation, ReLU, concatenate, Concatenate, \
     Dropout, BatchNormalization, Lambda, Flatten, Dense
 from tensorflow.keras.models import Model
+from models.heads import move_classification_head, position_evaluation_head
 
 sq1x1 = "squeeze1x1"
 exp1x1 = "expand1x1"
@@ -33,17 +34,11 @@ def fire_module(x, fire_id, squeeze=16, expand=64):
     return x
 
 
-def squeezenet_feature_extractor(image_shape=(8, 8, 18),
-                                 use_bn_on_input=False,
-                                 first_stride=1,
+def chessboard_feature_extractor(image_shape=(8, 8, 18),
                                  name='squeezenet'):
-    raw_image_input = tf.keras.Input(shape=image_shape)
-    if use_bn_on_input:
-        image_input = BatchNormalization()(raw_image_input)
-    else:
-        image_input = raw_image_input
+    chessboard_input = tf.keras.Input(shape=image_shape)
 
-    x = Convolution2D(64, (3, 3), strides=(first_stride, first_stride), padding='same', name='conv1')(image_input)
+    x = Convolution2D(64, (3, 3), strides=(1, 1), padding='same', name='conv1')(chessboard_input)
     x = Activation('relu', name='relu_conv1')(x)
     # x = MaxPooling2D(pool_size=(3, 3), strides=(2, 2), padding='same', name='pool1')(x)
 
@@ -59,25 +54,43 @@ def squeezenet_feature_extractor(image_shape=(8, 8, 18),
     x = fire_module(x, fire_id=7, squeeze=48, expand=192)
     x = fire_module(x, fire_id=8, squeeze=64, expand=256)
     x = fire_module(x, fire_id=9, squeeze=64, expand=256)
-    #x = Dropout(0.5, name='drop9')(x)
 
-    model = Model(image_input, x, name=name)
+    model = Model(chessboard_input, x, name=name)
     return model
 
 
-def squeezenet_chess_move_classifier(image_shape=(8, 8, 18)):
-    chessboard_before = tf.keras.Input(shape=image_shape, name='chessboard_before')
-    chessboard_after = tf.keras.Input(shape=image_shape, name='chessboard_after')
-    x = Concatenate(axis=-1, name='concatenated_positions')([chessboard_before, chessboard_after])
-    feature_extractor = squeezenet_feature_extractor(image_shape=(image_shape[0], image_shape[1], image_shape[2]*2))
-    features = feature_extractor(x)
-    x = Convolution2D(1, (1, 1), padding='valid', activation='relu', name='last_conv')(features)
-    x = GlobalAveragePooling2D()(x)
-    out = Activation('sigmoid', name='target')(x)
-    model = Model(inputs=[chessboard_before, chessboard_after], outputs=out)
+def chess_move_classifier(input_shape=(8, 8, 18)):
+    chessboard = tf.keras.Input(shape=input_shape, name='chessboard')
+    feature_extractor = chessboard_feature_extractor(image_shape=input_shape)
+    features = feature_extractor(chessboard)
+    out = move_classification_head(features)
+    model = Model(inputs=chessboard, outputs=out)
+    return model
+
+
+def chess_position_evaluator(input_shape=(8, 8, 18)):
+    chessboard = tf.keras.Input(shape=input_shape, name='chessboard')
+    feature_extractor = chessboard_feature_extractor(image_shape=input_shape)
+    features = feature_extractor(chessboard)
+    out = position_evaluation_head(features)
+    model = Model(inputs=chessboard, outputs=out)
+    return model
+
+
+def chess_move_classifier_and_position_evaluator(input_shape=(8, 8, 18)):
+    chessboard = tf.keras.Input(shape=input_shape, name='chessboard')
+    feature_extractor = chessboard_feature_extractor(image_shape=input_shape)
+    features = feature_extractor(chessboard)
+    policy = move_classification_head(features)
+    value = position_evaluation_head(features)
+    model = Model(inputs=chessboard, outputs=[policy, value])
     return model
 
 
 if __name__ == '__main__':
-    schess = squeezenet_chess_move_classifier(image_shape=(8, 8, 18))
-    schess.summary()
+    neural_move_classifier = chess_move_classifier(input_shape=(8, 8, 18))
+    neural_position_evaluator = chess_position_evaluator(input_shape=(8, 8, 18))
+    neural_move_classifier_and_position_evaluator = chess_move_classifier_and_position_evaluator(input_shape=(8, 8, 18))
+    neural_move_classifier.summary()
+    neural_position_evaluator.summary()
+    neural_move_classifier_and_position_evaluator.summary()
