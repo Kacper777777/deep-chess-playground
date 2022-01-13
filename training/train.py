@@ -72,10 +72,7 @@ def create_matrices_helper(fen_move_result):
 
 def create_matrices(x):
     a, b = tf.py_function(create_matrices_helper, [x], Tout=[tf.float32, tf.float32])
-    dataset = tf.data.Dataset.from_tensor_slices(tuple([a, b]))
-    dataset = dataset.map(lambda board, out1: ({'chessboard': board},
-                                               {'evaluation': out1}))
-    return dataset
+    return ({"chessboard": a}, {"evaluation": b})
 
 
 def main():
@@ -108,6 +105,7 @@ def main():
     ds_train = ds_train.interleave(map_func=get_position_move_and_result,
                                    num_parallel_calls=tf.data.experimental.AUTOTUNE)
     ds_train = ds_train.cache()
+    ds_train = ds_train.shuffle(1000000)
     ds_train = ds_train.map(map_func=create_matrices,
                             num_parallel_calls=tf.data.experimental.AUTOTUNE)
     ds_train = ds_train.batch(batch_size)
@@ -117,6 +115,7 @@ def main():
     ds_val = ds_val.interleave(map_func=get_position_move_and_result,
                                num_parallel_calls=tf.data.experimental.AUTOTUNE)
     ds_val = ds_val.cache()
+    ds_val = ds_val.shuffle(1000000)
     ds_val = ds_val.map(map_func=create_matrices,
                         num_parallel_calls=tf.data.experimental.AUTOTUNE)
     ds_val = ds_val.batch(batch_size)
