@@ -23,14 +23,14 @@ min_elo, max_elo = 1001, 1400
 
 def get_position_move_and_result_helper(file):
     file_name = str(file.numpy())[2:-1]
-    df = pd.read_csv(file_name, sep='\t')
+    df = pd.read_csv(file_name, sep=';')
     df = df.sample(frac=1).reset_index(drop=True)
     df['WhiteElo'] = pd.to_numeric(df['WhiteElo'], errors='coerce')
     df['BlackElo'] = pd.to_numeric(df['BlackElo'], errors='coerce')
     df = df[df['WhiteElo'].notnull()]
     df = df[df['BlackElo'].notnull()]
-    df['WhiteElo'] = df['WhiteElo'].between(1001, 1400, inclusive=True)
-    df['BlackElo'] = df['BlackElo'].between(1001, 1400, inclusive=True)
+    df = df[df['WhiteElo'].between(1001, 1400, inclusive=True)]
+    df = df[df['BlackElo'].between(1001, 1400, inclusive=True)]
     df_dict = df.to_dict('records')
     datapoints = []
     for row in df_dict:
@@ -40,38 +40,43 @@ def get_position_move_and_result_helper(file):
         for actual_index, actual_move in enumerate(game.mainline_moves()):
             fen_before = board.fen()
             board.push(actual_move)
-            datapoints.append(f"""{str(fen_before)};{str(actual_move)};{row["Result"]}""")
+            datapoints.append((str(fen_before), str(actual_move), row["Result"]))
     random.shuffle(datapoints)
-    return datapoints
+    datapoints = np.array(datapoints)
+    return [datapoints]
 
 
 def get_position_move_and_result(file):
-    a = tf.py_function(get_position_move_and_result_helper, [file], Tout=[tf.string])
-    dataset = tf.data.Dataset.from_tensor_slices(a)
+    a = tf.py_function(get_position_move_and_result_helper, [file],
+                       Tout=[tf.string])
+    dataset = tf.data.Dataset.from_tensor_slices(tuple(a)).map(map_func=create_matrices,
+                                                               num_parallel_calls=tf.data.experimental.AUTOTUNE)
     return dataset
 
 
-def create_matrices_helper(fen_move_result):
-    fen_move_result = str(fen_move_result.numpy())[2:-1]
-    elements = fen_move_result.split(";")
-    fen, move, str_result = elements[0], elements[1], elements[2]
-    res_white = float(str_result[0])
-    res_black = float(str_result[2])
-    draw = float((res_white + res_black) == 0)
-    if res_white:
-        result = 0
-    elif draw:
-        result = 1
+def create_matrices_helper(position_move_and_result):
+    np_arr = position_move_and_result.numpy()
+    fen = str(np_arr[0])[2:-1]
+    move = str(np_arr[1])[2:-1]
+    str_result = str(np_arr[2])[2:-1]
+    if str_result == "1/2-1/2":
+        res_white, draw, res_black = 0, 1, 0
     else:
-        result = 2
+        res_white, draw, res_black = float(str_result[0]), 0, float(str_result[2])
+    if res_white:
+        hot_index = 0
+    elif draw:
+        hot_index = 1
+    else:
+        hot_index = 2
     encoded_position = convert_fen_to_matrix(fen)
     # move_probabilities = encode_move_8x8x73(move)
-    evaluation = tf.one_hot(indices=result, depth=3)
-    return encoded_position, evaluation
+    evaluation = tf.one_hot(indices=hot_index, depth=3)
+    return [encoded_position, evaluation]
 
 
-def create_matrices(x):
-    a, b = tf.py_function(create_matrices_helper, [x], Tout=[tf.float32, tf.float32])
+def create_matrices(position_move_and_result):
+    a, b = tf.py_function(create_matrices_helper, [position_move_and_result], Tout=[tf.float32, tf.float32])
     return ({"chessboard": a}, {"evaluation": b})
 
 
@@ -87,7 +92,7 @@ def main():
     # Dataset and training configuration
     dataset_dir = os.path.join(DATA_REAL_PATH, 'datasets', "1001-1400")
     shuffle_data = True
-    batch_size = 512
+    batch_size = 2048
     input_shape = (8, 8, 18)
     train_ratio = 0.8
     epochs = 50
@@ -104,20 +109,12 @@ def main():
     ds_train = ds_train.shuffle(number_of_files)
     ds_train = ds_train.interleave(map_func=get_position_move_and_result,
                                    num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    ds_train = ds_train.cache()
-    ds_train = ds_train.shuffle(1000000)
-    ds_train = ds_train.map(map_func=create_matrices,
-                            num_parallel_calls=tf.data.experimental.AUTOTUNE)
     ds_train = ds_train.batch(batch_size)
     ds_train = ds_train.prefetch(tf.data.experimental.AUTOTUNE)
 
     ds_val = ds_val.shuffle(number_of_files)
     ds_val = ds_val.interleave(map_func=get_position_move_and_result,
                                num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    ds_val = ds_val.cache()
-    ds_val = ds_val.shuffle(1000000)
-    ds_val = ds_val.map(map_func=create_matrices,
-                        num_parallel_calls=tf.data.experimental.AUTOTUNE)
     ds_val = ds_val.batch(batch_size)
     ds_val = ds_val.prefetch(tf.data.experimental.AUTOTUNE)
 
@@ -149,9 +146,15 @@ def main():
     # Compiling the model
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
     loss = 'categorical_crossentropy'
-    metrics = [tf.keras.metrics.BinaryAccuracy(threshold=0.5),
-               tf.keras.metrics.Precision(),
-               tf.keras.metrics.Recall()]
+    metrics = [
+        tf.keras.metrics.TruePositives(name='tp'),
+        tf.keras.metrics.FalsePositives(name='fp'),
+        tf.keras.metrics.TrueNegatives(name='tn'),
+        tf.keras.metrics.FalseNegatives(name='fn'),
+        tf.keras.metrics.BinaryAccuracy(name='accuracy'),
+        tf.keras.metrics.Precision(name='precision'),
+        tf.keras.metrics.Recall(name='recall')
+    ]
     model.compile(optimizer=optimizer,
                   loss=loss,
                   metrics=metrics,
