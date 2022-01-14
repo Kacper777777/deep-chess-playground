@@ -15,7 +15,7 @@ def make_csv_from_pgn(source_dir, destination_dir, num_games_per_file):
             return
         print(f"Saving games to a file")
         with open(filepath, 'w', newline='') as output_file:
-            tsv_writer = csv.writer(output_file, delimiter='\t')
+            tsv_writer = csv.writer(output_file, delimiter=';')
             tsv_writer.writerow(headers)
             for item in games:
                 tsv_writer.writerow(item)
