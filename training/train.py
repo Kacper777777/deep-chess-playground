@@ -25,6 +25,10 @@ def get_position_move_and_result_helper(file):
     file_name = str(file.numpy())[2:-1]
     df = pd.read_csv(file_name, sep=';')
     df = df.sample(frac=1).reset_index(drop=True)
+    df = df[df['Termination'] == 'Normal']
+    df['TimeControl'] = df['TimeControl'].apply(lambda x: x[0: x.find('+')])
+    df['TimeControl'] = pd.to_numeric(df['TimeControl'], errors='coerce')
+    df = df[df['TimeControl'].notnull()]
     df['WhiteElo'] = pd.to_numeric(df['WhiteElo'], errors='coerce')
     df['BlackElo'] = pd.to_numeric(df['BlackElo'], errors='coerce')
     df = df[df['WhiteElo'].notnull()]
@@ -59,19 +63,10 @@ def create_matrices_helper(position_move_and_result):
     fen = str(np_arr[0])[2:-1]
     move = str(np_arr[1])[2:-1]
     str_result = str(np_arr[2])[2:-1]
-    if str_result == "1/2-1/2":
-        res_white, draw, res_black = 0, 1, 0
-    else:
-        res_white, draw, res_black = float(str_result[0]), 0, float(str_result[2])
-    if res_white:
-        hot_index = 0
-    elif draw:
-        hot_index = 1
-    else:
-        hot_index = 2
+    result_index_dict = {"1-0": 0, "1/2-1/2": 1, "0-1": 2}
     encoded_position = convert_fen_to_matrix(fen)
     # move_probabilities = encode_move_8x8x73(move)
-    evaluation = tf.one_hot(indices=hot_index, depth=3)
+    evaluation = tf.one_hot(indices=result_index_dict.get(str_result), depth=3)
     return [encoded_position, evaluation]
 
 
