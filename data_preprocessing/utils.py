@@ -7,9 +7,11 @@ import chess
 import chess.pgn
 
 
-def make_csv_from_pgn(source_dir, destination_dir, num_games_per_file):
-    """It takes all the .pgn files from the source_dir and it creates .csv files
-    in the destination_dir. Each .csv file will have at most num_games_per_file records."""
+def make_csv_from_pgn(source_dir, destination_dir, num_files, num_games_per_file):
+    """It takes the .pgn files from the source_dir and it creates .csv files
+    in the destination_dir. Each .csv file will have at most num_games_per_file records.
+    The function will create at most num_files files."""
+
     def save_games_to_csv(headers, games, filepath):
         if len(games) == 0:
             return
@@ -45,16 +47,21 @@ def make_csv_from_pgn(source_dir, destination_dir, num_games_per_file):
                 games.append(game_info)
 
                 if len(games) == num_games_per_file:
-                    Thread(target=save_games_to_csv, args=(headers,
-                                                           list(games[:num_games_per_file]),
-                                                           os.path.join(destination_dir,
-                                                                        f'{destination_file_counter}.csv'))).start()
+                    Thread(target=save_games_to_csv,
+                           args=(headers,
+                                 list(games[:num_games_per_file]),
+                                 os.path.join(destination_dir,
+                                              f'{destination_file_counter}.csv'))).start()
                     games = []
                     destination_file_counter += 1
-        Thread(target=save_games_to_csv, args=(headers,
-                                               list(games[:num_games_per_file]),
-                                               os.path.join(destination_dir,
-                                                            f'{destination_file_counter}.csv'))).start()
+                    if destination_file_counter == num_files:
+                        return
+        # save the remaining files
+        Thread(target=save_games_to_csv,
+               args=(headers,
+                     list(games[:num_games_per_file]),
+                     os.path.join(destination_dir,
+                                  f'{destination_file_counter}.csv'))).start()
 
 
 def convert_fen_to_matrix(fen):
@@ -66,7 +73,8 @@ def convert_fen_to_matrix(fen):
     white_queenside_castle = 1 if "Q" in fen_elements[2] else 0
     black_kingside_castle = 1 if "k" in fen_elements[2] else 0
     black_queenside_castle = 1 if "q" in fen_elements[2] else 0
-    en_passant_index = (8 - int(fen_elements[3][1]), ord(fen_elements[3][0]) - ord('a')) if fen_elements[3] != '-' else None
+    en_passant_index = (8 - int(fen_elements[3][1]), ord(fen_elements[3][0]) - ord('a')) if fen_elements[
+                                                                                                3] != '-' else None
     half_moves = int(fen_elements[4])
     full_moves = int(fen_elements[5])
 
@@ -113,7 +121,7 @@ def encode_move_8x8x73(move):
     elif move == 'e8c8':  # black long
         encoded_position[2][0][67] = 1
     else:
-        move = [(ord(move[0]) - ord('`')), int(move[1]), (ord(move[2])-ord('`')), int(move[3])]
+        move = [(ord(move[0]) - ord('`')), int(move[1]), (ord(move[2]) - ord('`')), int(move[3])]
         coords = move[3] - move[1], move[2] - move[0]
         move[2] -= 1
         move[3] -= 1
@@ -145,28 +153,28 @@ def encode_move_8x8x73(move):
 
         elif coords[1] == 0:  # vertical
             if coords[0] > 0:  # up
-                encoded_position[move[2]][7 - move[3]][coords[0] -1] = 1
+                encoded_position[move[2]][7 - move[3]][coords[0] - 1] = 1
             elif coords[0] < 0:  # down
-                encoded_position[move[2]][7 - move[3]][abs(coords[0]) + 28 -1] = 1
+                encoded_position[move[2]][7 - move[3]][abs(coords[0]) + 28 - 1] = 1
 
         elif coords[0] == 0:  # horizontal
             if coords[1] > 0:  # right
-                encoded_position[move[2]][7 - move[3]][coords[1] + 14 -1] = 1
+                encoded_position[move[2]][7 - move[3]][coords[1] + 14 - 1] = 1
             elif coords[1] < 0:  # left
-                encoded_position[move[2]][7 - move[3]][abs(coords[1]) + 42 -1] = 1
+                encoded_position[move[2]][7 - move[3]][abs(coords[1]) + 42 - 1] = 1
 
         elif coords[0] != 0 and coords[1] != 0:  # diagonal
             if coords[1] > 0:  # right
                 if coords[0] > 0:  # right up
-                    encoded_position[move[2]][7 - move[3]][coords[1] + 7 -1] = 1
+                    encoded_position[move[2]][7 - move[3]][coords[1] + 7 - 1] = 1
                 elif coords[0] < 0:  # right down
-                    encoded_position[move[2]][7 - move[3]][abs(coords[1]) + 21 -1] = 1
+                    encoded_position[move[2]][7 - move[3]][abs(coords[1]) + 21 - 1] = 1
 
             elif coords[1] < 0:  # left
                 if coords[0] > 0:  # left up
-                    encoded_position[move[2]][7 - move[3]][coords[0] + 49 -1] = 1
+                    encoded_position[move[2]][7 - move[3]][coords[0] + 49 - 1] = 1
                 elif coords[0] < 0:  # left down
-                    encoded_position[move[2]][7 - move[3]][abs(coords[1]) + 35 -1] = 1
+                    encoded_position[move[2]][7 - move[3]][abs(coords[1]) + 35 - 1] = 1
 
     x = np.where(encoded_position == 1)
     print(x)
