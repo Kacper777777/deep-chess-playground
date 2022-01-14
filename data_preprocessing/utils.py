@@ -19,11 +19,6 @@ def make_csv_from_pgn(source_dir, destination_dir, num_files, num_games_per_file
         print(f"Saving games to a file")
         df = pd.DataFrame(games, columns=headers)
         df.to_csv(filepath, index=False, sep='\t')
-        # with open(filepath, 'w', newline='') as output_file:
-        #     tsv_writer = csv.writer(output_file, delimiter=';')
-        #     tsv_writer.writerow(headers)
-        #     for item in games:
-        #         tsv_writer.writerow(item)
         print("Games saved")
 
     list_of_dir_entries = [f for f in os.scandir(source_dir)]
