@@ -29,6 +29,7 @@ def get_position_move_and_result_helper(file):
     df['TimeControl'] = df['TimeControl'].apply(lambda x: x[0: x.find('+')])
     df['TimeControl'] = pd.to_numeric(df['TimeControl'], errors='coerce')
     df = df[df['TimeControl'].notnull()]
+    df = df[df['TimeControl'] > 600]
     df['WhiteElo'] = pd.to_numeric(df['WhiteElo'], errors='coerce')
     df['BlackElo'] = pd.to_numeric(df['BlackElo'], errors='coerce')
     df = df[df['WhiteElo'].notnull()]
