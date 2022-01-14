@@ -92,7 +92,7 @@ def main():
     # Dataset and training configuration
     dataset_dir = os.path.join(DATA_REAL_PATH, 'datasets', "1001-1400")
     shuffle_data = True
-    batch_size = 2048
+    batch_size = 1024
     input_shape = (8, 8, 18)
     train_ratio = 0.8
     epochs = 50
