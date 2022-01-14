@@ -23,7 +23,7 @@ min_elo, max_elo = 1001, 1400
 
 def get_position_move_and_result_helper(file):
     file_name = str(file.numpy())[2:-1]
-    df = pd.read_csv(file_name, sep=';')
+    df = pd.read_csv(file_name, sep='\t')
     df = df.sample(frac=1).reset_index(drop=True)
     df = df[df['Termination'] == 'Normal']
     df['TimeControl'] = df['TimeControl'].apply(lambda x: x[0: x.find('+')])
